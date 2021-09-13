@@ -1,0 +1,109 @@
+- name: 创建相关目录
+  file: name={{ item }} state=directory
+  with_items:
+  - /etc/cni/net.d
+  - /opt/kube/images
+  - /opt/kube/ovn-k8s
+
+- name: 配置 crd.yaml 文件
+  copy: src={{ item.name }}.yaml dest=/opt/kube/ovn-k8s/{{ item.name }}.yaml
+  with_items:
+    - { name: "egressip", enable: "{{ ovn_k8s_enable_egressip }}" }
+    - { name: "egressfirewall", enable: "{{ ovn_k8s_enable_egressfirewall }}" }
+    - { name: "floatingip", enable: "{{ ovn_k8s_enable_floatingip }}" }
+    - { name: "floatingipclaim", enable: "{{ ovn_k8s_enable_floatingip }}" }
+    - { name: "floatingipprovider", enable: "{{ ovn_k8s_enable_floatingip }}" }
+    - { name: "network", enable: "{{ ovn_k8s_enable_vpc }}" }
+  when: item.enable | bool
+
+- name: 配置 ovn-k8s.yaml 文件
+  template: src={{ item }}.yaml.j2 dest=/opt/kube/ovn-k8s/{{ item }}.yaml
+  with_items:
+    - "ovn-setup"
+    - "ovs-node"
+    - "ovnkube-db"
+    - "ovnkube-node"
+    - "ovnkube-master"
+
+# 【可选】推送离线镜像，可以忽略执行错误
+- block:
+    - name: 检查是否已下载离线ovn_kubernetes镜像
+      command: "ls {{ base_dir }}/down"
+      register: download_info
+      connection: local
+      run_once: true
+    
+    - name: 尝试推送离线docker镜像（若执行失败，可忽略）
+      copy: src={{ base_dir }}/down/{{ item }} dest=/opt/kube/images/{{ item }}
+      when: 'item in download_info.stdout'
+      with_items:
+      - "pause.tar"
+      - "{{ ovn_kubernetes_offline }}"
+      ignore_errors: true
+
+    - name: 获取ovn_kubernetes离线镜像推送情况
+      command: "ls /opt/kube/images"
+      register: image_info
+
+    # 如果目录下有离线镜像，就把它导入到node节点上
+    - name: 导入ovn_kubernetes的离线镜像（若执行失败，可忽略）
+      shell: "{{ bin_dir }}/docker load -i /opt/kube/images/{{ item }}"
+      with_items:
+      - "pause.tar"
+      - "{{ ovn_kubernetes_offline }}"
+      ignore_errors: true
+      when: "item in image_info.stdout and CONTAINER_RUNTIME == 'docker'"
+
+    - name: 导入ovn_kubernetes的离线镜像（若执行失败，可忽略）
+      shell: "{{ bin_dir }}/ctr -n=k8s.io images import /opt/kube/images/{{ item }}"
+      with_items:
+      - "pause.tar"
+      - "{{ ovn_kubernetes_offline }}"
+      ignore_errors: true
+      when: "item in image_info.stdout and CONTAINER_RUNTIME == 'containerd'"
+
+- name: 标记SDN控制节点
+  shell: "{{ bin_dir }}/kubectl label node {{ inventory_hostname }} node-role.kubernetes.io/master='' --overwrite && \
+    {{ bin_dir }}/kubectl label node {{ inventory_hostname }} node-role.kubernetes.io/control-plane='' --overwrite"
+  when: "inventory_hostname in groups['kube_master']"
+
+- name: 标记EgressIP节点
+  shell: "{{ bin_dir }}/kubectl label node {{ inventory_hostname }} k8s.ovn.org/egress-assignable='' --overwrite"
+  when: "inventory_hostname in groups['kube_node'] and ovn_k8s_enable_egressip"
+
+- name: 标记浮动IP节点
+  shell: "{{ bin_dir }}/kubectl label node {{ inventory_hostname }} k8s.ovn.org/floatingip-assignable='' --overwrite"
+  when: "inventory_hostname in groups['kube_node'] and ovn_k8s_enable_floatingip"
+
+# 只需单节点执行一次
+- name: 运行ovn-kubernetes网络
+  shell: "{{ bin_dir }}/kubectl apply -f /opt/kube/ovn-k8s/{{ item }}.yaml && sleep 5"
+  with_items:
+    - "ovn-setup"
+    - "ovs-node"
+    - "ovnkube-db"
+    - "ovnkube-node"
+    - "ovnkube-master"
+  run_once: true
+
+# 删除原有cni配置
+- name: 删除默认cni配置
+  file: path=/etc/cni/net.d/10-default.conf state=absent
+
+- name: 停止kube-proxy
+  systemd:
+    name: kube-proxy
+    enabled: no
+    state: stopped
+
+# 等待网络插件部署成功，视下载镜像速度而定
+- name: 轮询等待ovn-kubernetes运行，视下载镜像速度而定
+  shell: "{{ bin_dir }}/kubectl get pod -n ovn-kubernetes -o wide|grep 'ovnkube-master'|grep ' {{ inventory_hostname }} '|awk '{print $3}'"
+  register: pod_status
+  until: pod_status.stdout == "Running"
+  retries: 15
+  delay: 8
+  ignore_errors: true
+
+- name: 拷贝cni plugin
+  shell: "cp /opt/cni/bin/ovn-k8s-cni-overlay /opt/kube/bin/ovn-k8s-cni-overlay"

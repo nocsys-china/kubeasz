@@ -1,0 +1,7 @@
+ovn_k8s_enable_egressip: false
+ovn_k8s_enable_egressfirewall: false
+ovn_k8s_enable_floatingip: true
+ovn_k8s_enable_vpc: true
+
+# apiserver 默认第一个master节点
+KUBE_APISERVER: "https://{{ groups['kube_master'][0] }}:{{ SECURE_PORT }}"
