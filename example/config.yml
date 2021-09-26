@@ -171,6 +171,14 @@ EGRESS_IP_NODES:
 # [ovn-kubernetes]Egress Firewall 支持开关
 EGRESS_FIREWALL_ENABLE: "true"
 
+# [ovn-kubernetes]FloatingIP 支持开关
+FLOATING_IP_ENABLE: "true"
+FLOATING_IP_NODES:
+  - "{{ groups['kube_node'][0] }}"
+
+# [ovn-kubernetes]租户网络支持开关
+TENANT_NETWORK_ENABLE: "true"
+
 # [ovn-kubernetes]智能网卡支持开关
 SMART_NIC_HOST_ENABLE: "false"
 MGMT_PORT_NETDEV: "ens3"
@@ -186,7 +194,7 @@ GATEWAY_NEXTHOP: "127.0.0.1"
 ovn_kubernetes_ver: "__ovn_kubernetes__"
 
 # [ovn-kubernetes]默认镜像名
-ovn_kubernetes_image: "nocsyscn/ovn-kubernetes:{{ ovn_kubernetes_ver }}"
+ovn_kubernetes_image: "nocsyscn/ovn-kube:{{ ovn_kubernetes_ver }}"
 
 # [ovn-kubernetes]离线镜像tar包
 ovn_kubernetes_offline: "ovn-kubernetes_{{ ovn_kubernetes_ver }}.tar"

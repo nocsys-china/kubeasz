@@ -107,6 +107,8 @@ spec:
               value: ""
             - name: OVN_EGRESSIP_ENABLE
               value: "{{ 'true' if EGRESS_IP_ENABLE | bool else 'false'}}"
+            - name: OVN_FLOATINGIP_ENABLE
+              value: "{{ 'true' if FLOATING_IP_ENABLE | bool else 'false'}}"
             - name: OVN_HYBRID_OVERLAY_NET_CIDR
               value: ""
             - name: OVN_DISABLE_SNAT_MULTIPLE_GWS

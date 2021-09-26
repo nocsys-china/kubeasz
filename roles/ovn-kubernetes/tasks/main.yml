@@ -10,6 +10,10 @@
   with_items:
     - { name: "egressip", enable: "{{ EGRESS_IP_ENABLE }}" }
     - { name: "egressfirewall", enable: "{{ EGRESS_FIREWALL_ENABLE }}" }
+    - { name: "floatingip", enable: "{{ FLOATING_IP_ENABLE }}" }
+    - { name: "floatingipclaim", enable: "{{ FLOATING_IP_ENABLE }}" }
+    - { name: "floatingipprovider", enable: "{{ FLOATING_IP_ENABLE }}" }
+    - { name: "network", enable: "{{ TENANT_NETWORK_ENABLE }}" }
   when: item.enable | bool == true
 
 - name: 配置 ovn-kubernetes.yaml 文件
@@ -67,6 +71,11 @@
   with_items: "{{ EGRESS_IP_NODES }}"
   when: EGRESS_IP_ENABLE | bool == true
 
+- name: 标记浮动IP节点
+  shell: "{{ bin_dir }}/kubectl label node {{ item }} k8s.ovn.org/floatingip-assignable='' --overwrite"
+  with_items: "{{ FLOATING_IP_NODES }}"
+  when: FLOATING_IP_ENABLE | bool == true
+
 - name: 标记Smart NIC节点
   shell: "{{ bin_dir }}/kubectl label node {{ item }} k8s.ovn.org/smart-nic='' --overwrite"
   with_items: "{{ SMART_NIC_HOSTS }}"
@@ -83,6 +92,10 @@
   with_items:
     - { name: "egressip", enable: "{{ EGRESS_IP_ENABLE }}" }
     - { name: "egressfirewall", enable: "{{ EGRESS_FIREWALL_ENABLE }}" }
+    - { name: "floatingip", enable: "{{ FLOATING_IP_ENABLE }}" }
+    - { name: "floatingipclaim", enable: "{{ FLOATING_IP_ENABLE }}" }
+    - { name: "floatingipprovider", enable: "{{ FLOATING_IP_ENABLE }}" }
+    - { name: "network", enable: "{{ TENANT_NETWORK_ENABLE }}" }
   when: item.enable | bool == true
   run_once: true
 

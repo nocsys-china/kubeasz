@@ -26,7 +26,7 @@ rules:
       - endpoints
       - services
       - configmaps
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "update"]
   - apiGroups:
       - extensions
       - networking.k8s.io
@@ -67,6 +67,14 @@ rules:
     resources:
       - customresourcedefinitions
     verbs: ["list", "get", "watch"]
+  - apiGroups:
+      - k8s.ovn.org
+    resources:
+      - floatingips
+      - floatingipclaims
+      - floatingipproviders
+      - networks
+    verbs: ["create", "delete", "list", "get", "watch", "update"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
