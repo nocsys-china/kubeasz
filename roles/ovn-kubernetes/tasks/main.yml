@@ -13,7 +13,8 @@
     - { name: "floatingip", enable: "{{ FLOATING_IP_ENABLE }}" }
     - { name: "floatingipclaim", enable: "{{ FLOATING_IP_ENABLE }}" }
     - { name: "floatingipprovider", enable: "{{ FLOATING_IP_ENABLE }}" }
-    - { name: "network", enable: "{{ TENANT_NETWORK_ENABLE }}" }
+    - { name: "vpcnetwork", enable: "{{ TENANT_NETWORK_ENABLE }}" }
+    - { name: "vpcsubnet", enable: "{{ TENANT_NETWORK_ENABLE }}" }
   when: item.enable | bool == true
 
 - name: 配置 ovn-kubernetes.yaml 文件
@@ -95,7 +96,8 @@
     - { name: "floatingip", enable: "{{ FLOATING_IP_ENABLE }}" }
     - { name: "floatingipclaim", enable: "{{ FLOATING_IP_ENABLE }}" }
     - { name: "floatingipprovider", enable: "{{ FLOATING_IP_ENABLE }}" }
-    - { name: "network", enable: "{{ TENANT_NETWORK_ENABLE }}" }
+    - { name: "vpcnetwork", enable: "{{ TENANT_NETWORK_ENABLE }}" }
+    - { name: "vpcsubnet", enable: "{{ TENANT_NETWORK_ENABLE }}" }
   when: item.enable | bool == true
   run_once: true
 
