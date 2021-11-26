@@ -1,4 +1,4 @@
----
+# service to expose the ovnkube-db pod
 apiVersion: v1
 kind: Service
 metadata:
@@ -19,10 +19,16 @@ spec:
   type: ClusterIP
 
 ---
+
+# ovnkube-db
+# daemonset version 3
+# starts ovn NB/SB ovsdb daemons, each in a separate container
+# it is running on master for now, but does not need to be the case
 kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: ovnkube-db
+  # namespace set up by install
   namespace: ovn-kubernetes
   annotations:
     kubernetes.io/description: |
@@ -50,19 +56,32 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
+      # Requires fairly broad permissions - ability to read all services and network functions as well
+      # as all pods.
       serviceAccountName: ovn
       hostNetwork: true
       containers:
+        # firewall rules for ovn - assumed to be setup
+        # iptables -A OS_FIREWALL_ALLOW -p tcp -m state --state NEW -m tcp --dport 6641 -j ACCEPT
+        # iptables -A OS_FIREWALL_ALLOW -p tcp -m state --state NEW -m tcp --dport 6642 -j ACCEPT
+
+        # nb-ovsdb - v3
         - name: nb-ovsdb
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "nb-ovsdb"]
+
           securityContext:
             runAsUser: 0
             capabilities:
               add: ["NET_ADMIN"]
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
+            # ovn db is stored in the pod in /etc/openvswitch
+            # (or in /etc/ovn if OVN from new repository is used)
+            # and on the host in /var/lib/openvswitch/
             - mountPath: /etc/openvswitch/
               name: host-var-lib-ovs
             - mountPath: /etc/ovn/
@@ -78,6 +97,7 @@ spec:
               name: host-var-run-ovs
             - mountPath: /var/run/openvswitch/
               name: host-var-run-ovs
+
           resources:
             requests:
               cpu: 100m
@@ -110,16 +130,25 @@ spec:
             initialDelaySeconds: 30
             timeoutSeconds: 30
             periodSeconds: 60
+        # end of container
+
+        # sb-ovsdb - v3
         - name: sb-ovsdb
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "sb-ovsdb"]
+
           securityContext:
             runAsUser: 0
             capabilities:
               add: ["NET_ADMIN"]
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
+            # ovn db is stored in the pod in /etc/openvswitch
+            # (or in /etc/ovn if OVN from new repository is used)
+            # and on the host in /var/lib/openvswitch/
             - mountPath: /etc/openvswitch/
               name: host-var-lib-ovs
             - mountPath: /etc/ovn/
@@ -135,6 +164,7 @@ spec:
               name: host-var-run-ovs
             - mountPath: /var/run/openvswitch/
               name: host-var-run-ovs
+
           resources:
             requests:
               cpu: 100m
@@ -167,6 +197,9 @@ spec:
             initialDelaySeconds: 30
             timeoutSeconds: 30
             periodSeconds: 60
+
+      # end of container
+
       nodeSelector:
         node-role.kubernetes.io/master: ""
         kubernetes.io/os: "linux"

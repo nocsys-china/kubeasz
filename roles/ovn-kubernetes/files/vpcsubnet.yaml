@@ -1,0 +1,74 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.5
+  creationTimestamp: null
+  name: vpcsubnets.k8s.ovn.org
+spec:
+  group: k8s.ovn.org
+  names:
+    kind: VPCSubnet
+    listKind: VPCSubnetList
+    plural: vpcsubnets
+    singular: vpcsubnet
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .status
+          name: status
+          type: string
+      name: v1
+      schema:
+        openAPIV3Schema:
+          description: Declare a vpc subnet and add the namespace of the vpc subnet
+            to the vpc network. Each namespace has only one vpc subnet in ready state.
+            Before adding or removing a namespace to or from the vpc network by declaring
+            a vpc subnet, it is necessary to ensure that the pod under the namespace
+            is empty to avoid address resource disclosure.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: Describe vpc subnet information
+              properties:
+                cidr:
+                  description: Declare the cidr information used by the subnet. If it
+                    is empty, it will be automatically allocated by the controller.
+                    The length of the cidr must be consistent with the subnetLength
+                    of the vpc network
+                  type: string
+                vpc:
+                  description: Indicates the vpc network name to which the current vpc
+                    subnet belongs
+                  type: string
+              required:
+                - vpc
+              type: object
+            status:
+              description: Observed status of VPCSubnet
+              type: string
+          required:
+            - spec
+          type: object
+      served: true
+      storage: true
+      subresources: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

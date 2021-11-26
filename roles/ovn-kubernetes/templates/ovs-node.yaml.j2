@@ -1,8 +1,13 @@
 ---
+# ovs-node
+# daemonset version 3
+# starts node daemons for ovs
+# it is run on all nodes
 kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: ovs-node
+  # namespace set up by install
   namespace: ovn-kubernetes
   annotations:
     kubernetes.io/description: |
@@ -27,10 +32,14 @@ spec:
       hostNetwork: true
       hostPID: true
       containers:
+
+        # ovsdb-server and ovs-switchd daemons
         - name: ovs-daemons
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "ovs-server"]
+
           livenessProbe:
             exec:
               command:
@@ -45,9 +54,12 @@ spec:
             initialDelaySeconds: 30
             timeoutSeconds: 30
             periodSeconds: 60
+
           securityContext:
             runAsUser: 0
+            # Permission could be reduced by selecting an appropriate SELinux policy
             privileged: true
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
             - mountPath: /lib/modules
@@ -59,12 +71,15 @@ spec:
               name: host-var-run-ovs
             - mountPath: /sys
               name: host-sys
+            - mountPath: /etc/openvswitch
+              name: host-config-openvswitch
             - mountPath: /var/run/dbus/
               name: host-var-run-dbus
             - mountPath: /var/log/openvswitch/
               name: host-var-log-ovs
             - mountPath: /var/lib/openvswitch/
               name: host-var-lib-ovs
+
           resources:
             requests:
               cpu: 100m
@@ -79,6 +94,7 @@ spec:
             preStop:
               exec:
                 command: ["/root/ovnkube.sh", "cleanup-ovs-server"]
+
       nodeSelector:
         kubernetes.io/os: "linux"
       affinity:
@@ -107,8 +123,12 @@ spec:
         - name: host-sys
           hostPath:
             path: /sys
+        - name: host-config-openvswitch
+          hostPath:
+            path: /etc/origin/openvswitch
         - name: host-var-lib-ovs
           hostPath:
             path: /var/lib/openvswitch
+
       tolerations:
         - operator: "Exists"

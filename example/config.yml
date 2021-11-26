@@ -179,17 +179,6 @@ FLOATING_IP_NODES:
 # [ovn-kubernetes]租户网络支持开关
 TENANT_NETWORK_ENABLE: "true"
 
-# [ovn-kubernetes]智能网卡支持开关
-SMART_NIC_HOST_ENABLE: "false"
-MGMT_PORT_NETDEV: "ens3"
-SMART_NIC_HOSTS:
-  - "{{ groups['kube_node'][0] }}"
-
-# [ovn-kubernetes]指定网关网卡支持开关
-GATEWAY_INTERFACE_ENABLE: "false"
-GATEWAY_INTERFACE: "ens3"
-GATEWAY_NEXTHOP: "127.0.0.1"
-
 # [ovn-kubernetes]更新支持ovn-kubernetes 版本: [v1.0]
 ovn_kubernetes_ver: "__ovn_kubernetes__"
 

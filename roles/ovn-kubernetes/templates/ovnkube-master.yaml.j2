@@ -1,8 +1,12 @@
----
+# ovnkube-master
+# daemonset version 3
+# starts master daemons, each in a separate container
+# it is run on the master(s)
 kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: ovnkube-master
+  # namespace set up by install
   namespace: ovn-kubernetes
   annotations:
     kubernetes.io/description: |
@@ -29,8 +33,13 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
+      # Requires fairly broad permissions - ability to read all services and network functions as well
+      # as all pods.
       serviceAccountName: ovn
       hostNetwork: true
+
+      # required to be scheduled on a linux node with node-role.kubernetes.io/master label and
+      # only one instance of ovnkube-master pod per node
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -53,17 +62,23 @@ spec:
                     values:
                       - ovnkube-master
               topologyKey: kubernetes.io/hostname
+
       containers:
+        # ovn-northd - v3
         - name: ovn-northd
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "run-ovn-northd"]
+
           securityContext:
             runAsUser: 0
             capabilities:
               add: ["SYS_NICE"]
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
+            # Run directories where we need to be able to access sockets
             - mountPath: /var/run/dbus/
               name: host-var-run-dbus
               readOnly: true
@@ -78,6 +93,7 @@ spec:
             - mountPath: /ovn-cert
               name: host-ovn-cert
               readOnly: true
+
           resources:
             requests:
               cpu: 100m
@@ -104,12 +120,17 @@ spec:
             initialDelaySeconds: 30
             timeoutSeconds: 30
             periodSeconds: 60
+        # end of container
+
         - name: nbctl-daemon
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "run-nbctld"]
+
           securityContext:
             runAsUser: 0
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
             - mountPath: /var/log/openvswitch/
@@ -139,20 +160,27 @@ spec:
                   key: k8s_apiserver
             - name: OVN_SSL_ENABLE
               value: "no"
+
           readinessProbe:
             exec:
               command: ["/usr/bin/ovn-kube-util", "readiness-probe", "-t", "ovn-nbctl"]
             initialDelaySeconds: 30
             timeoutSeconds: 30
             periodSeconds: 60
+          # end of container
+
         - name: ovnkube-master
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "ovn-master"]
+
           securityContext:
             runAsUser: 0
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
+            # Run directories where we need to be able to access sockets
             - mountPath: /var/run/dbus/
               name: host-var-run-dbus
               readOnly: true
@@ -165,6 +193,7 @@ spec:
             - mountPath: /ovn-cert
               name: host-ovn-cert
               readOnly: true
+
           resources:
             requests:
               cpu: 100m
@@ -240,7 +269,10 @@ spec:
                 configMapKeyRef:
                   name: ovn-config
                   key: host_network_namespace
+      # end of container
+
       volumes:
+        # TODO: Need to check why we need this?
         - name: host-var-run-dbus
           hostPath:
             path: /var/run/dbus

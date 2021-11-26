@@ -1,8 +1,13 @@
 ---
+# ovnkube-node
+# daemonset version 3
+# starts node daemons for ovn, each in a separate container
+# it is run on all nodes
 kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: ovnkube-node
+  # namespace set up by install
   namespace: ovn-kubernetes
   annotations:
     kubernetes.io/description: |
@@ -24,19 +29,28 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
+      # Requires fairly broad permissions - ability to read all services and network functions as well
+      # as all pods.
       serviceAccountName: ovn
       hostNetwork: true
       hostPID: true
       containers:
+
         - name: ovnkube-node
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "ovn-node"]
+
           securityContext:
             runAsUser: 0
             privileged: true
+
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
+            # Common mounts
+            # for the iptables wrapper
             - mountPath: /host
               name: host-slash
               readOnly: true
@@ -45,8 +59,10 @@ spec:
               readOnly: true
             - mountPath: /var/log/ovn-kubernetes/
               name: host-var-log-ovnkube
+              # We mount our socket here
             - mountPath: /var/run/ovn-kubernetes
               name: host-var-run-ovn-kubernetes
+            # CNI related mounts which we take over
             - mountPath: /opt/cni/bin
               name: host-opt-cni-bin
             - mountPath: /etc/cni/net.d
@@ -54,6 +70,7 @@ spec:
             - mountPath: /var/run/netns
               name: host-netns
               mountPropagation: Bidirectional
+            # ovnkube-node only mounts (non smart-nic related)
             - mountPath: /var/run/openvswitch/
               name: host-var-run-ovs
             - mountPath: /var/run/ovn/
@@ -67,6 +84,7 @@ spec:
             - mountPath: /etc/ovn/
               name: host-var-lib-ovs
               readOnly: true
+
           resources:
             requests:
               cpu: 100m
@@ -113,12 +131,7 @@ spec:
             - name: OVN_GATEWAY_MODE
               value: "shared"
             - name: OVN_GATEWAY_OPTS
-              {% if GATEWAY_INTERFACE_ENABLE | bool -%}
-                value: "--gateway-interface={{ GATEWAY_INTERFACE }} --gateway-nexthop={{ GATEWAY_NEXTHOP }}"
-              {% else -%}
-                value: ""
-              {% endif %}
-
+              value: ""
             - name: OVN_HYBRID_OVERLAY_ENABLE
               value: ""
             - name: OVN_EGRESSIP_ENABLE
@@ -141,8 +154,6 @@ spec:
               value: ""
             - name: OVN_V6_JOIN_SUBNET
               value: ""
-            - name: OVN_REMOTE_PROBE_INTERVAL
-              value: "100000"
             - name: OVN_MULTICAST_ENABLE
               value: ""
             - name: OVN_UNPRIVILEGED_MODE
@@ -151,25 +162,42 @@ spec:
               value: ""
             - name: OVN_SSL_ENABLE
               value: "no"
+            - name: OVN_DISABLE_OVN_IFACE_ID_VER
+              value: "false"
+            - name: OVN_REMOTE_PROBE_INTERVAL
+              value: "100000"
+            - name: OVN_MONITOR_ALL
+              value: ""
+            - name: OVN_ENABLE_LFLOW_CACHE
+              value: ""
+            - name: OVN_LFLOW_CACHE_LIMIT
+              value: ""
+            - name: OVN_LFLOW_CACHE_LIMIT_KB
+              value: ""
             - name: OVN_HOST_NETWORK_NAMESPACE
               valueFrom:
                 configMapKeyRef:
                   name: ovn-config
                   key: host_network_namespace
+
           readinessProbe:
             exec:
               command: ["/usr/bin/ovn-kube-util", "readiness-probe", "-t", "ovnkube-node"]
             initialDelaySeconds: 30
             timeoutSeconds: 30
             periodSeconds: 60
+
         - name: ovn-controller
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "ovn-controller"]
+
           securityContext:
             runAsUser: 0
             capabilities:
               add: ["SYS_NICE"]
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
             - mountPath: /var/run/dbus/
@@ -186,6 +214,7 @@ spec:
             - mountPath: /ovn-cert
               name: host-ovn-cert
               readOnly: true
+
           resources:
             requests:
               cpu: 100m
@@ -206,20 +235,26 @@ spec:
                   fieldPath: metadata.namespace
             - name: OVN_SSL_ENABLE
               value: "no"
+
           readinessProbe:
             exec:
               command: ["/usr/bin/ovn-kube-util", "readiness-probe", "-t", "ovn-controller"]
             initialDelaySeconds: 30
             timeoutSeconds: 30
             periodSeconds: 60
+
+          # ovs-metrics-exporter - v3
         - name: ovs-metrics-exporter
           image: "{{ ovn_kubernetes_image }}"
           imagePullPolicy: "IfNotPresent"
+
           command: ["/root/ovnkube.sh", "ovs-metrics"]
+
           securityContext:
             runAsUser: 0
             capabilities:
               add: ["NET_ADMIN"]
+
           terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
             - mountPath: /var/run/dbus/
@@ -230,6 +265,7 @@ spec:
             - mountPath: /var/run/openvswitch/
               name: host-var-run-ovs
               readOnly: true
+
           resources:
             requests:
               cpu: 100m
@@ -241,6 +277,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+          # end of container
       nodeSelector:
         kubernetes.io/os: "linux"
       affinity:
@@ -251,6 +288,7 @@ spec:
                   - key: k8s.ovn.org/smart-nic
                     operator: DoesNotExist
       volumes:
+        # Common volumes
         - name: host-var-run-dbus
           hostPath:
             path: /var/run/dbus
@@ -272,6 +310,7 @@ spec:
         - name: host-netns
           hostPath:
             path: /var/run/netns
+        # non Smart-NIC related volumes
         - name: host-var-log-ovs
           hostPath:
             path: /var/log/openvswitch
@@ -288,5 +327,6 @@ spec:
         - name: host-var-lib-ovs
           hostPath:
             path: /var/lib/openvswitch
+
       tolerations:
         - operator: "Exists"
