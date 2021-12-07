@@ -1,0 +1,146 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: ovnkube-webhook
+  annotations:
+    cert-manager.io/inject-ca-from: ovn-kubernetes/ovnkube-webhook-cert
+webhooks:
+  - name: ovnkube-webhook.ovn-kubernetes.com
+    rules:
+      - operations:  ["UPDATE"]
+        apiGroups:   ["k8s.ovn.org"]
+        apiVersions: ["v1"]
+        resources:   ["vpcnetworks"]
+        scope:       "*"
+      - operations:  ["CREATE","UPDATE","DELETE"]
+        apiGroups:   ["k8s.ovn.org"]
+        apiVersions: ["v1"]
+        resources:   ["vpcsubnets"]
+        scope:       "Namespaced"
+      - operations:  ["UPDATE"]
+        apiGroups:   ["k8s.ovn.org"]
+        apiVersions: ["v1"]
+        resources:   ["floatingipproviders"]
+        scope:       "*"
+      - operations:  ["CREATE","UPDATE"]
+        apiGroups:   ["k8s.ovn.org"]
+        apiVersions: ["v1"]
+        resources:   ["floatingipclaims"]
+        scope:       "*"
+      - operations:  ["CREATE","UPDATE","DELETE"]
+        apiGroups:   ["k8s.ovn.org"]
+        apiVersions: ["v1"]
+        resources:   ["floatingips"]
+        scope:       "*"
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    clientConfig:
+      service:
+        namespace: ovn-kubernetes
+        name: ovnkube-webhook
+        path: /validate-crd
+        port: 443
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ovnkube-webhook-cert
+  namespace: ovn-kubernetes
+spec:
+  secretName: ovnkube-webhook-cert
+  commonName: ovnkube-webhook.ovn-kubernetes.svc
+  dnsNames:
+    - ovnkube-webhook
+    - ovnkube-webhook.ovn-kubernetes
+    - ovnkube-webhook.ovn-kubernetes.svc
+  issuerRef:
+    name: ovnkube-webhook-selfsigned-issuer
+
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ovnkube-webhook-selfsigned-issuer
+  namespace: ovn-kubernetes
+spec:
+  selfSigned: {}
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: ovnkube-webhook
+  namespace: ovn-kubernetes
+  annotations:
+    kubernetes.io/description: |
+      ovn-kubernetes webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ovnkube-webhook
+  strategy:
+    rollingUpdate:
+      maxSurge: 0%
+      maxUnavailable: 100%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: ovnkube-webhook
+        component: network
+        type: infra
+    spec:
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: ovnkube-webhook
+              topologyKey: kubernetes.io/hostname
+      serviceAccountName: ovn
+      containers:
+        - name: ovnkube-webhook
+          image: "{{ ovn_kubernetes_image }}"
+          imagePullPolicy: "IfNotPresent"
+          command: ["/root/ovnkube.sh", "ovnkube-webhook"]
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+          env:
+            - name: OVN_DAEMONSET_VERSION
+              value: "3"
+            - name: OVNKUBE_LOGLEVEL
+              value: "5"
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: ovnkube-webhook-cert
+      nodeSelector:
+        beta.kubernetes.io/os: "linux"
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ovnkube-webhook
+  namespace: ovn-kubernetes
+spec:
+  ports:
+    - name: ovnkube-webhook
+      protocol: TCP
+      port: 443
+      targetPort: 8443
+  type: ClusterIP
+  selector:
+    app: ovnkube-webhook
+  sessionAffinity: None

@@ -6,16 +6,20 @@
   - /opt/kube/ovn-kubernetes
 
 - name: 配置 crd.yaml 文件
-  copy: src={{ item.name }}.yaml dest=/opt/kube/ovn-kubernetes/{{ item.name }}.yaml
+  copy: src={{ item }}.yaml dest=/opt/kube/ovn-kubernetes/{{ item }}.yaml
   with_items:
-    - { name: "egressip", enable: "{{ EGRESS_IP_ENABLE }}" }
-    - { name: "egressfirewall", enable: "{{ EGRESS_FIREWALL_ENABLE }}" }
-    - { name: "floatingip", enable: "{{ FLOATING_IP_ENABLE }}" }
-    - { name: "floatingipclaim", enable: "{{ FLOATING_IP_ENABLE }}" }
-    - { name: "floatingipprovider", enable: "{{ FLOATING_IP_ENABLE }}" }
-    - { name: "vpcnetwork", enable: "{{ TENANT_NETWORK_ENABLE }}" }
-    - { name: "vpcsubnet", enable: "{{ TENANT_NETWORK_ENABLE }}" }
-  when: item.enable | bool == true
+    - "egressip"
+    - "egressfirewall"
+    - "floatingip"
+    - "floatingipclaim"
+    - "floatingipprovider"
+    - "vpcnetwork"
+    - "vpcsubnet"
+
+- name: 配置 cert-manager
+  copy: src={{ item }}.yaml dest=/opt/kube/ovn-kubernetes/{{ item }}.yaml
+  with_items:
+    - "cert-manager"
 
 - name: 配置 ovn-kubernetes.yaml 文件
   template: src={{ item }}.yaml.j2 dest=/opt/kube/ovn-kubernetes/{{ item }}.yaml
@@ -25,6 +29,7 @@
     - "{{ 'ovnkube-db-raft' if OVN_DB_RAFT_ENABLE | bool else 'ovnkube-db' }}"
     - "ovnkube-master"
     - "ovnkube-node"
+    - "ovnkube-webhook"
 
 # 【可选】推送离线镜像，可以忽略执行错误
 - block:
@@ -40,6 +45,9 @@
       with_items:
       - "pause.tar"
       - "{{ ovn_kubernetes_offline }}"
+      - "cert-manager-webhook_v1.6.1.tar"
+      - "cert-manager-cainjector_v1.6.1.tar"
+      - "cert-manager-controller_v1.6.1.tar"
       ignore_errors: true
 
     - name: 获取 ovn_kubernetes 离线镜像推送情况
@@ -52,6 +60,9 @@
       with_items:
       - "pause.tar"
       - "{{ ovn_kubernetes_offline }}"
+      - "cert-manager-webhook_v1.6.1.tar"
+      - "cert-manager-cainjector_v1.6.1.tar"
+      - "cert-manager-controller_v1.6.1.tar"
       ignore_errors: true
       when: "item in image_info.stdout and CONTAINER_RUNTIME == 'docker'"
 
@@ -60,6 +71,9 @@
       with_items:
       - "pause.tar"
       - "{{ ovn_kubernetes_offline }}"
+      - "cert-manager-webhook_v1.6.1.tar"
+      - "cert-manager-cainjector_v1.6.1.tar"
+      - "cert-manager-controller_v1.6.1.tar"
       ignore_errors: true
       when: "item in image_info.stdout and CONTAINER_RUNTIME == 'containerd'"
 
@@ -84,16 +98,15 @@
 
 # 只需单节点执行一次
 - name: 创建CRD
-  shell: "{{ bin_dir }}/kubectl apply -f /opt/kube/ovn-kubernetes/{{ item.name }}.yaml"
+  shell: "{{ bin_dir }}/kubectl apply -f /opt/kube/ovn-kubernetes/{{ item }}.yaml"
   with_items:
-    - { name: "egressip", enable: "{{ EGRESS_IP_ENABLE }}" }
-    - { name: "egressfirewall", enable: "{{ EGRESS_FIREWALL_ENABLE }}" }
-    - { name: "floatingip", enable: "{{ FLOATING_IP_ENABLE }}" }
-    - { name: "floatingipclaim", enable: "{{ FLOATING_IP_ENABLE }}" }
-    - { name: "floatingipprovider", enable: "{{ FLOATING_IP_ENABLE }}" }
-    - { name: "vpcnetwork", enable: "{{ TENANT_NETWORK_ENABLE }}" }
-    - { name: "vpcsubnet", enable: "{{ TENANT_NETWORK_ENABLE }}" }
-  when: item.enable | bool == true
+    - "egressip"
+    - "egressfirewall"
+    - "floatingip"
+    - "floatingipclaim"
+    - "floatingipprovider"
+    - "vpcnetwork"
+    - "vpcsubnet"
   run_once: true
 
 - name: 运行 ovn-kubernetes 网络
@@ -129,3 +142,21 @@
   shell: "cp /opt/cni/bin/ovn-k8s-cni-overlay {{ bin_dir }}/ovn-k8s-cni-overlay"
   retries: 12
   delay: 5
+
+- name: 创建cert-manager
+  shell: "{{ bin_dir }}/kubectl apply -f /opt/kube/ovn-kubernetes/cert-manager.yaml && sleep 5"
+  run_once: true
+
+- name: 轮询等待cert-manager运行，视下载镜像速度而定
+  shell: "{{ bin_dir }}/kubectl get pod -n cert-manager | grep 'cert-manager' | head -n 1 | awk '{print $2}'"
+  register: pod_status
+  until: pod_status.stdout == "1/1"
+  retries: 12
+  delay: 10
+
+- name: 创建webhook
+  shell: "{{ bin_dir }}/kubectl apply -f /opt/kube/ovn-kubernetes/ovnkube-webhook.yaml && sleep 5"
+  register: result
+  until: result.rc == 0
+  retries: 10
+  delay: 3

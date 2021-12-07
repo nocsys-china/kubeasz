@@ -320,6 +320,18 @@ function get_offline_image() {
     docker pull "nocsyscn/ovn-kube:$ovnKubernetesVer" && \
     docker save -o "$imageDir/ovn-kubernetes_$ovnKubernetesVer.tar" "nocsyscn/ovn-kube:$ovnKubernetesVer"
   fi
+  if [[ ! -f "$imageDir/cert-manager-webhook_v1.6.1.tar" ]];then
+    docker pull "quay.io/jetstack/cert-manager-webhook:v1.6.1" && \
+    docker save -o "$imageDir/cert-manager-webhook_v1.6.1.tar" "quay.io/jetstack/cert-manager-webhook:v1.6.1"
+  fi
+  if [[ ! -f "$imageDir/cert-manager-cainjector_v1.6.1.tar" ]];then
+    docker pull "quay.io/jetstack/cert-manager-cainjector:v1.6.1" && \
+    docker save -o "$imageDir/cert-manager-cainjector_v1.6.1.tar" "quay.io/jetstack/cert-manager-cainjector:v1.6.1"
+  fi
+  if [[ ! -f "$imageDir/cert-manager-controller_v1.6.1.tar" ]];then
+    docker pull "quay.io/jetstack/cert-manager-controller:v1.6.1" && \
+    docker save -o "$imageDir/cert-manager-controller_v1.6.1.tar" "quay.io/jetstack/cert-manager-controller:v1.6.1"
+  fi
 }
 
 function download_all() {
